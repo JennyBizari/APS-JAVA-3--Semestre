@@ -1,2 +1,375 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+package APS;
+
+import java.util.Scanner;
+
+public class aps {
+
+    private static Connection connection = null;
+    private static final String URL = "jdbc:mysql://localhost:3306";
+    private static final String USER = "root";
+    private static final String PASSWORD = "";
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        try {
+            connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            createDatabase();
+            createTableLogin();
+            createTablePatrimonio();
+            createTableChamado();
+            System.out.println("Conexão com MySQL estabelecida.");
+        } catch (SQLException e) {
+            System.out.println("Erro ao conectar ao banco de dados: " + e.getMessage());
+            return;
+        }
+
+        if (isRegister()) {
+            System.out.print("Você precisa logar, informe o usuário: ");
+            String user = sc.next();
+            System.out.print("Informe sua senha: ");
+            String password = sc.next();
+            boolean success = isUserPassword(user, password);
+            if (success) {
+                System.out.println("Logado com sucesso.");
+            } else {
+                System.out.println("Recusado, tente novamente.");
+                close();
+                return;
+            }
+        } else {
+            System.out.print("Você precisa se registrar, informe o seu nome: ");
+            String name = sc.next();
+            System.out.print("Informe o seu sobrenome: ");
+            String sobrenome = sc.next();
+            System.out.print("Informe o seu cpf (apenas números): ");
+            String cpf = sc.next();
+            System.out.print("Informe o seu telefone (apenas números): ");
+            String telefone = sc.next();
+            System.out.print("Informe o seu e-mail: ");
+            String email = sc.next();
+            System.out.print("Informe o usuário que deseja: ");
+            String user = sc.next();
+            System.out.print("Informe a senha que deseja: ");
+            String password = sc.next();
+            insertDadosLogin(name, sobrenome, cpf, telefone, email, user, password);
+        }
+
+        System.out.println("O que você gostaria de fazer?\n \nOpção 1: Cadastro de patrimônio\nOpção 2: Gerenciamento de chamados");
+        int opcao = sc.nextInt();
+        if (opcao != 1 && opcao != 2) {
+            System.out.println("Informe a opção 1 ou 2.");
+        } else {
+            boolean a = true;
+            if (opcao == 1) {
+                while (a) {
+                    System.out.print("Informe o nome do patrimônio: ");
+                    String nome = sc.next();
+                    System.out.print("Informe a categoria do patrimônio: ");
+                    String categoria = sc.next();
+                    System.out.print("Informe a localização do patrimônio: ");
+                    String loc = sc.next();
+                    String status = "";
+                    while (!status.equalsIgnoreCase("problema") && !status.equalsIgnoreCase("ok")) {
+                        System.out.print("Informe se o patrimônio está com 'problema' ou está 'ok': ");
+                        status = sc.next();
+                    }
+                    insertDadosPatrimonio(nome, categoria, loc, status);
+
+                    System.out.println("Quer continuar? Sim ou nao");
+                    String b = sc.next();
+                    if (!b.equalsIgnoreCase("sim")) {
+                        a = false;
+                    }
+                }
+            } else {
+                if (!isPatrimonio()) {
+                    System.out.println("Você precisa cadastrar um patrimônio primeiro.");
+                    return;
+                }
+                System.out.println("O que você gostaria de fazer?\n \nOpção 1: Abrir um chamado\nOpção 2: Verificar chamados");
+                int opcao2 = sc.nextInt();
+                if (opcao2 != 1 && opcao2 != 2) {
+                    System.out.println("Informe a opção 1 ou 2.");
+                } else {
+                    if (opcao2 == 1) {
+                        System.out.print("Informe o seu nome: ");
+                        String name = sc.next();
+                        System.out.println(" ");
+                        infoFromTable("patrimonio");
+                        System.out.print("Qual o seu patrimônio? Informe pelo número: ");
+                        int id = sc.nextInt();
+                        String patrimonio = selectNomeById(id, "patrimonio", false);
+                        if (patrimonio == null) {
+                            System.out.print("Patrimônio não encontrado, tente novamente.");
+                            close();
+                            return;
+                        }
+                        System.out.print("Informe o motivo do chamado: ");
+                        String motivo = sc.next();
+                        insertDadosChamado(name, patrimonio, motivo);
+                    } else {
+                        int info = infoFromTable("chamado");
+                        if (info == 0) {
+                            System.out.println("Não existem chamados abertos.");
+                            close();
+                            return;
+                        }
+                        System.out.print("Qual chamado você quer verificar? Informe pelo número: ");
+                        int id = sc.nextInt();
+                        String chamado = selectNomeById(id, "chamado", true);
+                        if (chamado == null) {
+                            System.out.print("Chamado não encontrado, tente novamente.");
+                            close();
+                            return;
+                        }
+                        System.out.println("Deseja alterar o status do chamado?\n \nOpção 1: Fechar o chamado\nOpção 2: Encerrar o sistema");
+                        int opcao3 = sc.nextInt();
+                        if (opcao3 != 1 && opcao3 != 2) {
+                            System.out.println("Informe a opção 1 ou 2.");
+                        } else {
+                            if (opcao3 == 1) {
+                                System.out.println("Chamado encerrado com sucesso.");
+                                deleteByID(id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        close();
+    }
+
+    private static void close() {
+        try {
+            if (connection != null) {
+                connection.close();
+                System.out.println("\nConexão fechada.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao fechar a conexão: " + e.getMessage());
+        }
+    }
+
+    private static void createDatabase() {
+        try (Statement s = connection.createStatement()) {
+            s.executeUpdate("CREATE DATABASE IF NOT EXISTS aps");
+            s.executeUpdate("USE aps");
+            System.out.println("Banco de dados criado com sucesso.");
+        } catch (SQLException e) {
+            System.out.println("Erro ao criar o banco de dados: " + e.getMessage());
+        }
+    }
+
+    private static void createTableLogin() {
+        String myTableName = "CREATE TABLE IF NOT EXISTS login ("
+                + "id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "nome VARCHAR(50),"
+                + "sobrenome VARCHAR(50),"
+                + "cpf VARCHAR(20),"
+                + "telefone VARCHAR(20),"
+                + "email VARCHAR(100),"
+                + "user_login VARCHAR(12),"
+                + "senha_login VARCHAR(20))";
+        try (Statement s = connection.createStatement()) {
+            s.executeUpdate(myTableName);
+            System.out.println("Tabela LOGIN criada com sucesso.");
+        } catch (SQLException e) {
+            System.out.println("Erro ao criar a tabela: " + e.getMessage());
+        }
+    }
+
+    private static void createTablePatrimonio() {
+        String myTableName = "CREATE TABLE IF NOT EXISTS patrimonio ("
+                + "id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "nome VARCHAR(50),"
+                + "categoria VARCHAR(50),"
+                + "loc VARCHAR(50),"
+                + "status VARCHAR(50))";
+        try (Statement s = connection.createStatement()) {
+            s.executeUpdate(myTableName);
+            System.out.println("Tabela PATRIMONIO criada com sucesso.");
+        } catch (SQLException e) {
+            System.out.println("Erro ao criar a tabela: " + e.getMessage());
+        }
+    }
+
+    private static void createTableChamado() {
+        String myTableName = "CREATE TABLE IF NOT EXISTS chamado ("
+                + "id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "nome VARCHAR(50),"
+                + "patrimonio VARCHAR(50),"
+                + "problema VARCHAR(50))";
+        try (Statement s = connection.createStatement()) {
+            s.executeUpdate(myTableName);
+            System.out.println("Tabela CHAMADO criada com sucesso.");
+        } catch (SQLException e) {
+            System.out.println("Erro ao criar a tabela: " + e.getMessage());
+        }
+    }
+
+    private static void deleteByID(int id) {
+        String sql = "DELETE FROM " + "chamado" + " WHERE id = " + id;
+        try (Statement statement = connection.createStatement()) {
+            int rowsAffected = statement.executeUpdate(sql);
+            if (rowsAffected > 0) {
+                System.out.println("Linha removida com sucesso.");
+            } else {
+                System.out.println("Nenhuma linha removida (ID não encontrado).");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao remover a linha: " + e.getMessage());
+        }
+    }
+
+    private static boolean isRegister() {
+        try (Statement statement = connection.createStatement()) {
+            ResultSet resultSet = statement.executeQuery("SELECT * FROM login");
+            while (resultSet.next()) {
+                String userLogin = resultSet.getString("user_login");
+                if (userLogin != null && !userLogin.isEmpty()) {
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao verificar registros: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private static boolean isPatrimonio() {
+        try (Statement statement = connection.createStatement()) {
+            ResultSet resultSet = statement.executeQuery("SELECT * FROM patrimonio");
+            while (resultSet.next()) {
+                String nome = resultSet.getString("nome");
+                if (nome != null && !nome.isEmpty()) {
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao verificar registros: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private static boolean isUserPassword(String user, String password) {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM login WHERE user_login = ? AND senha_login = ?")) {
+            statement.setString(1, user);
+            statement.setString(2, password);
+            ResultSet resultSet = statement.executeQuery();
+            return resultSet.next();
+        } catch (SQLException e) {
+            System.out.println("Erro ao verificar usuário e senha: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private static void insertDadosLogin(String nome, String sobrenome, String cpf, String telefone, String email, String userLogin, String senhaLogin) {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO login (nome, sobrenome, cpf, telefone, email, user_login, senha_login) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+            preparedStatement.setString(1, nome);
+            preparedStatement.setString(2, sobrenome);
+            preparedStatement.setString(3, cpf);
+            preparedStatement.setString(4, telefone);
+            preparedStatement.setString(5, email);
+            preparedStatement.setString(6, userLogin);
+            preparedStatement.setString(7, senhaLogin);
+
+            int rowsAffected = preparedStatement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                System.out.println("Dados LOGIN inseridos com sucesso.");
+            } else {
+                System.out.println("Nenhum dado inserido.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao inserir dados na tabela: " + e.getMessage());
+        }
+    }
+
+    private static void insertDadosPatrimonio(String nome, String categoria, String loc, String status) {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO patrimonio (nome, categoria, loc, status) VALUES (?, ?, ?, ?)")) {
+            preparedStatement.setString(1, nome);
+            preparedStatement.setString(2, categoria);
+            preparedStatement.setString(3, loc);
+            preparedStatement.setString(4, status);
+
+            preparedStatement.addBatch();
+            int rowsAffected = preparedStatement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                System.out.println("Dados PATRIMONIO inseridos com sucesso.");
+            } else {
+                System.out.println("Nenhum dado inserido.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao inserir dados na tabela: " + e.getMessage());
+        }
+    }
+
+    private static void insertDadosChamado(String nome, String patrimonio, String chamado) {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO chamado (nome, patrimonio, problema) VALUES (?, ?, ?)")) {
+            preparedStatement.setString(1, nome);
+            preparedStatement.setString(2, patrimonio);
+            preparedStatement.setString(3, chamado);
+
+            preparedStatement.addBatch();
+            int rowsAffected = preparedStatement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                System.out.println("Dados CHAMADO inseridos com sucesso.");
+            } else {
+                System.out.println("Nenhum dado inserido.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao inserir dados na tabela: " + e.getMessage());
+        }
+    }
+
+    private static int infoFromTable(String tabela) {
+        String sql = "SELECT * FROM " + tabela;
+
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(sql)) {
+
+            int num = 0;
+            while (resultSet.next()) {
+                num++;
+                int id = resultSet.getInt("id");
+                String nome = resultSet.getString("nome");
+
+                System.out.println(id + ": " + nome);
+            }
+            return num;
+        } catch (SQLException e) {
+            System.out.println("Erro ao selecionar dados da tabela: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    private static String selectNomeById(int id, String tabela, boolean info) {
+        String nome = null;
+        String sql = "SELECT * FROM " + tabela + " WHERE id = ?";
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, id);
+            ResultSet resultSet = statement.executeQuery();
+
+            if (resultSet.next()) {
+                nome = resultSet.getString("nome");
+
+                if (info) {
+                    String patrimonio = resultSet.getString("patrimonio");
+                    String motivo = resultSet.getString("problema");
+                    System.out.println("\nID: " + id + ", Nome: " + nome + ", Patrimônio: " + patrimonio + ", Motivo: " + motivo + "");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Erro ao selecionar o nome do patrimônio pelo ID: " + e.getMessage());
+        }
+
+        return nome;
+    }
+}
+
+
